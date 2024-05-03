@@ -124,6 +124,9 @@ include_directories(
   ${catkin_INCLUDE_DIRS}
 )
 
+add_executable(simul_car src/simul_car.cpp)
+target_link_libraries(simul_car   ${catkin_LIBRARIES})
+
 add_executable(pure_pursuit_cpp src/pure_pursuit.cpp)
 target_link_libraries(pure_pursuit_cpp   ${catkin_LIBRARIES})
 
