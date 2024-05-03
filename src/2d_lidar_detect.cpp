@@ -1,5 +1,3 @@
-#include <cmath>
-#include <vector>
 #include <ros/ros.h>
 #include <sensor_msgs/LaserScan.h>	
 
@@ -23,19 +21,25 @@ double Deg2Rad(double deg)
 void scanCallback(const sensor_msgs::LaserScan::ConstPtr& scan) 
 {
     int count = scan->scan_time / scan->time_increment;
+	//int count=(int)(360./RAD2DEG(scan->angle_increment));
 
     sum_point = 0;
 
     for(int i=0; i<count; i++) 
 	{
 		double point_rad = scan->angle_min + scan->angle_increment * i;
-        double point_deg = Rad2Deg(point_rad);
+		double point_deg = Rad2Deg(point_rad);
 
         if((point_deg >= -1*30)&&(point_deg <= 30)) 
         {
 			if((scan->ranges[i] <= roi_distance)&&(scan->ranges[i] >= scan->range_min))
 			{
 				sum_point++;
+
+				double point_x = scan->ranges[i]*cos(point_rad);
+				double point_y = scan->ranges[i]*sin(point_rad);
+			
+				cout << sum_point << " : [X : " <<point_x << "m, Y : " << point_y << "m]" << endl;
 			}
         }
     }
@@ -48,7 +52,7 @@ int main(int argc, char **argv)
 
 	ros::Rate rate(8);
 
-	ros::Subscriber lidar_sub = nh.subscribe("/scan", 100, &scanCallback);
+	ros::Subscriber lidar_sub = nh.subscribe<sensor_msgs::LaserScan>("/scan", 100, &scanCallback);
 	
 	while(ros::ok())
 	{

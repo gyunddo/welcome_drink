@@ -1,75 +1,52 @@
-#include <cmath>
-#include <vector>
 #include <ros/ros.h>
+#include <geometry_msgs/Twist.h>
+#include <geometry_msgs/Point.h>
 #include <visualization_msgs/Marker.h>
-#include <tf2/LinearMath/Quaternion.h>
-#include <tf2/LinearMath/Matrix3x3.h>
-#include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 
-ros::Publisher rviz_car_pub;
+using namespace std;
+
+ros::Publisher car_control_pub;
 ros::Publisher rviz_target_point_pub;
 
+float car_steering_rad = 0.0;
 double deg2rad = M_PI/180;
 double rad2deg = 180/M_PI;
-double yaw_gain_deg, car_yaw_rad = 0.0;
-
-std::pair<double, double> car_position = {0.0, 0.0};
+double car_pos_x, car_pos_y = 0.0;
 
 //////////////////////////////////////////////////////////
-std::pair<double ,double> target_point = {5.0, 2.76756905};
+std::pair<double ,double> target_point = {5.0, 2.76756905};     //{X, Y}  unit : [m]
         
-double car_velocity = 0.3;
+double car_velocity = 0.3;                                      //unit : [m/s]
 /////////////////////////////////////////////////////////
 
 float Calculate_steering()
 {
-    float steering_rad;
-
-    double dx = (target_point.first - car_position.first);
-    double dy = (target_point.second - car_position.second);
+    double dx = (target_point.first - car_pos_x);
+    double dy = (target_point.second - car_pos_y);
 
     double dist = sqrt(dx*dx + dy*dy);
 
     double alpha = atan2(dy, dx);
 
-    steering_rad = alpha;
+    float steering_rad = alpha;
     
     return steering_rad;
 }
 
-void Rviz_car()
+void Car_pos_Callback(const geometry_msgs::Point::ConstPtr &car_pos)
 {
-    visualization_msgs::Marker ego_car;
+    car_pos_x = car_pos->x;
+    car_pos_y = car_pos->y; 
+}
 
-    ego_car.header.frame_id = "edu_frame";
-    ego_car.header.stamp = ros::Time::now();
-    ego_car.ns = "ego_car";
-    ego_car.id = 0;
-    ego_car.type = visualization_msgs::Marker::CUBE;
-    ego_car.action = visualization_msgs::Marker::ADD;
-    ego_car.lifetime = ros::Duration(0.2);
+void Publish_control_value()
+{
+    geometry_msgs::Twist car_control;
 
-    ego_car.pose.position.x = car_position.first;
-    ego_car.pose.position.y = car_position.second;
-    ego_car.pose.position.z = 0;
+    car_control.linear.x = car_velocity;
+    car_control.angular.z = car_steering_rad;
 
-    tf2::Quaternion quaternion;
-
-    quaternion.setRPY(0, 0, car_yaw_rad);
-
-    ego_car.pose.orientation = tf2::toMsg(quaternion);
-
-    ego_car.scale.x = 1.04;
-    ego_car.scale.y = 0.75;
-    ego_car.scale.z = 0.1;
-
-    ego_car.color.r = 0.0;      
-    ego_car.color.g = 0.0;     
-    ego_car.color.b = 1.0;
-    
-    ego_car.color.a = 0.75;
-
-    rviz_car_pub.publish(ego_car);
+    car_control_pub.publish(car_control);
 }
 
 void Rviz_target_point()
@@ -103,62 +80,45 @@ void Rviz_target_point()
 
 int main(int argc, char **argv)
 {
-	ros::init(argc, argv, "edu_node");
+	ros::init(argc, argv, "edu_angle_steering_node");
 	ros::NodeHandle nh;
 
-    ros::Rate loop(10);
+    ros::Rate loop(8);
 
-    rviz_car_pub = nh.advertise<visualization_msgs::Marker> ("/rviz_car_position", 10);
+    ros::Subscriber car_position_sub = nh.subscribe<geometry_msgs::Point>("/car_position", 10, &Car_pos_Callback);
+
+    car_control_pub = nh.advertise<geometry_msgs::Twist> ("/control_value", 10);
     rviz_target_point_pub = nh.advertise<visualization_msgs::Marker> ("/rviz_target_point", 10);
+
+    geometry_msgs::Twist car_control;
 
 	while(ros::ok())
     {	
-        ros::Time ros_stamp = ros::Time::now();
-        double stamp = ros_stamp.toSec();	
+        car_steering_rad = Calculate_steering();
 
-        static double last_stamp = stamp;
+        Publish_control_value();
 
-        double dt_run = stamp - last_stamp;
-
-        float car_steering_rad = Calculate_steering();
-        float car_yaw_steering_rad = car_steering_rad - car_yaw_rad;
-
-        double yaw_rate_rad = car_velocity/1.04 * car_yaw_steering_rad;
-        yaw_gain_deg = yaw_rate_rad*rad2deg*dt_run;
-        car_yaw_rad = car_yaw_rad + yaw_gain_deg*deg2rad;
-
-        double dist = car_velocity*dt_run;
-
-        car_position.first = car_position.first + dist*cos(car_steering_rad);
-        car_position.second = car_position.second + dist*sin(car_steering_rad);
-        
-        Rviz_car();
         Rviz_target_point();
 		
-        std::cout << "Target point position(X, Y)[m]" << std::endl;
-        std::cout << target_point.first << ", " << target_point.second << std::endl;
-        std::cout << " " << std::endl;
+        cout << "Target point position(X, Y)[m]" << endl;
+        cout << target_point.first << ", " << target_point.second << endl;
+        cout << " " << endl;
 	
-        std::cout << "Car velocity[m/s] : " << car_velocity << std::endl;
-        std::cout << "Car steering[deg] : " << car_steering_rad*rad2deg << std::endl;
-        std::cout << "Car Yaw steering[deg] : " << car_yaw_steering_rad*rad2deg << std::endl;
-        std::cout << "Car yaw[deg] : " << car_yaw_rad*rad2deg << std::endl;
-        std::cout << " " << std::endl;
+        cout << "Car velocity[m/s] : " << car_velocity << endl;
+        cout << "Car steering[deg] : " << car_steering_rad*rad2deg << endl;
+        cout << " " << endl;
 
-        std::cout << "Car position(X, Y)[m]" << std::endl;
-        std::cout << car_position.first << ", " << car_position.second << std::endl;
-        std::cout << " " << std::endl;
+        cout << "Car position(X, Y)[m]" << endl;
+        cout << car_pos_x << ", " << car_pos_y << endl;
+        cout << " " << endl;
 
-        std::cout << "****************************" << std::endl;
-        std::cout << " " << std::endl;
+        cout << "****************************" << endl;
+        cout << " " << endl;
 
         loop.sleep();
 
-        last_stamp = stamp;
-
 		ros::spinOnce();
 	}
-	ros::spin();
 	
     return 0;
 }
